@@ -1,0 +1,370 @@
+﻿http://www.sql.ru/forum/632921/vozmozhno-li-programmno-ustanovit-modem
+
+Option Explicit
+
+Public Type GUID
+  Data1 As Long
+  Data2 As Integer
+  Data3 As Integer
+  Data4(7) As Byte
+End Type
+
+Public Const ERROR_KEY_DOES_NOT_EXIST = 2
+Public Const ERROR_INSUFFICIENT_BUFFER = 122&
+Public Const INVALID_HANDLE_VALUE = -1
+
+'Device Installation Structures
+Public Type SP_DEVINFO_DATA
+  cbSize As Long
+  ClassGuid As GUID
+  DevInst As Long
+  Reserved As Long
+End Type
+
+'Flags -Flags that control installation and user interface operations.
+Public Const DI_ENUMSINGLEINF = &H10000
+'FlagsEx -Additional flags that provide control over installation and user interface operations.
+Public Const DI_FLAGSEX_ALLOWEXCLUDEDDRVS = &H800
+
+Public Type SP_DEVINSTALL_PARAMS
+  cbSize As Long
+  Flags As Long
+  FlagsEx As Long
+  hWndParent As Long
+  InstallMsgHandler As Long 'PSP_FILE_CALLBACK
+  InstallMsgHandlerContext As Long 'PVOID
+  FileQueue As Long 'HSPFILEQ
+  ClassInstallReserved As Long 'ULONG_PTR
+  Reserved As Long
+  DriverPath(MAX_PATH - 1) As Byte ' A-version
+End Type
+
+Public Const LINE_LEN = 256
+
+Public Type SP_DRVINFO_DATA
+  cbSize As Long
+  DriverType As Long
+  Reserved As Long
+  Description(LINE_LEN - 1) As Byte ' A-version
+  MfgName(LINE_LEN - 1) As Byte ' A-version
+  ProviderName(LINE_LEN - 1) As Byte ' A-version
+  DriverDate As FILETIME
+  DriverVersion(1) As Long 'DWORDLONG -одного Long недостаточно!
+End Type
+
+'Public Device Installation Functions
+
+Public Const DI_NEEDREBOOT = &H100
+Public Const DI_NEEDRESTART = &H80
+
+Public Declare Function InstallSelectedDriver Lib "newdev.dll" _
+ (ByVal hWndParent As Long, ByVal DeviceInfoSet As Long, _
+ ByVal Reserved As Long, ByVal Backup As Long, ByRef bReboot As Long) As Boolean
+
+'DriverType - The type of driver list to build.
+Public Const SPDIT_COMPATDRIVER = &H2
+
+Public Declare Function SetupDiBuildDriverInfoList Lib "setupapi.dll" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, _
+ ByVal DriverType As Long) As Boolean
+
+'Device Installation Function Codes
+Public Const DIF_REMOVE = &H5
+Public Const DIF_SELECTBESTCOMPATDRV = &H17
+
+Public Declare Function SetupDiCallClassInstaller Lib "setupapi.dll" _
+ (ByVal InstallFunction As Long, _
+ ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA) As Boolean
+
+'CreationFlags - controls how the device information element is created
+Public Const DICD_GENERATE_ID = 1
+
+Public Declare Function SetupDiCreateDeviceInfo _
+ Lib "setupapi.dll" Alias "SetupDiCreateDeviceInfoA" _
+ (ByVal DeviceInfoSet As Long, _
+ ByVal DeviceName As String, ByRef ClassGuid As GUID, _
+ ByVal DeviceDescription As String, ByVal hWndParent As Long, _
+ ByVal CreationFlags As Long, ByRef DeviceInfoData As SP_DEVINFO_DATA) As Boolean
+ 
+Public Declare Function SetupDiCreateDeviceInfoList Lib "setupapi.dll" _
+ (ByRef ClassGuid As GUID, Optional ByVal hWndParent As Long) As Long
+ 
+'Scope - where the information is stored. The key created can be global or hardware profile-specific.
+Public Const DICS_FLAG_GLOBAL = &H1
+'KeyType -The type of registry storage key to create.
+Public Const DIREG_DRV = 2
+
+Public Declare Function SetupDiCreateDevRegKey _
+ Lib "setupapi.dll" Alias "SetupDiCreateDevRegKeyA" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, ByVal Scope As Long, _
+ ByVal HwProfile As Long, ByVal KeyType As Long, ByVal InfHandle As Long, _
+ ByVal InfSectionName As String) As Long
+ 
+Public Declare Function SetupDiDestroyDeviceInfoList Lib "setupapi.dll" _
+ (ByVal DeviceInfoSet As Long) As Boolean
+Public Declare Function SetupDiGetDeviceInstallParams _
+ Lib "setupapi.dll" Alias "SetupDiGetDeviceInstallParamsA" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, _
+ ByRef DeviceInstallParams As SP_DEVINSTALL_PARAMS) As Boolean
+Public Declare Function SetupDiGetINFClass Lib "setupapi.dll" Alias "SetupDiGetINFClassA" _
+ (ByVal InfName As String, ByRef ClassGuid As GUID, _
+ ByVal ClassName As String, ByVal ClassNameSize As Long, _
+ Optional ByRef RequiredSize As Long) As Boolean
+Public Declare Function SetupDiGetSelectedDriver _
+ Lib "setupapi.dll" Alias "SetupDiGetSelectedDriverA" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, ByRef DriverInfoData As SP_DRVINFO_DATA) As Boolean
+Public Declare Function SetupDiOpenDevRegKey Lib "setupapi.dll" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, ByVal Scope As Long, _
+ ByVal HwProfile As Long, ByVal KeyType As Long, ByVal samDesired As Long) As Long
+Public Declare Function SetupDiRegisterDeviceInfo Lib "setupapi.dll" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, ByVal Flags As Long, _
+ ByVal CompareProc As Long, ByVal CompareContext As Long, ByRef DupDeviceInfoData As Long) As Boolean 'Optional параметры опускаем
+Public Declare Function SetupDiSetDeviceInstallParams _
+ Lib "setupapi.dll" Alias "SetupDiSetDeviceInstallParamsA" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, _
+ ByRef DeviceInstallParams As SP_DEVINSTALL_PARAMS) As Boolean
+ 
+'Property - identifies the property to be set
+Public Const SPDRP_HARDWAREID = 1 'REG_MULTI_SZ string that contains the list of hardware IDs for a device
+ 
+Public Declare Function SetupDiSetDeviceRegistryProperty _
+ Lib "setupapi.dll" Alias "SetupDiSetDeviceRegistryPropertyA" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA, ByVal Property As Long, _
+ ByVal PropertyBuffer As Long, ByVal PropertyBufferSize As Long) As Boolean
+Public Declare Function SetupDiSetSelectedDevice Lib "setupapi.dll" _
+ (ByVal DeviceInfoSet As Long, _
+ ByRef DeviceInfoData As SP_DEVINFO_DATA) As Boolean
+ 
+'InstallFlags -A caller-supplied value
+Public Const INSTALLFLAG_FORCE = &H1
+
+Public Declare Function UpdateDriverForPlugAndPlayDevices _
+ Lib "newdev.dll" Alias "UpdateDriverForPlugAndPlayDevicesA" _
+ (ByVal hWndParent As Long, ByVal HardwareId As String, _
+ ByVal FullInfPath As String, ByVal InstallFlags As Long, _
+ Optional ByRef bRebootRequired As Boolean) As Boolean
+
+Public Function InstallModem(ByVal INF_File As String, _
+ ByVal COM_Port As String, ByVal Hardware_ID As String, _
+ Optional ByRef RebootRequired As Boolean) As Boolean
+  'INF_File -путь к inf-файлу (напр. C:\111\mdmgen.inf)
+  'COM_Port -порт, на кот. устанавливаем (напр. COM35)
+  'Hardware_ID -напр. mdmgen144
+  'RebootRequired-возвращается true если нужна перезагрузка
+  
+  Dim bResult As Boolean
+  Dim m_ClassGUID As GUID
+  Dim m_ClassName As String
+  Dim ReqSize As Long
+  Dim hDeviceInfoSet As Long
+  Dim m_DeviceInfoData As SP_DEVINFO_DATA
+  Dim bRemove As Boolean
+  Dim hKeyDev As Long
+  Dim dwRet As Long
+  Dim m_DriverInfoData As SP_DRVINFO_DATA
+  Dim m_DeviceInstallParams As SP_DEVINSTALL_PARAMS
+  
+  ' Use the INF File to extract the Class GUID
+  bResult = SetupDiGetINFClass(INF_File, m_ClassGUID, m_ClassName, 0, ReqSize)
+  If (bResult = False) And (Err.LastDllError = ERROR_INSUFFICIENT_BUFFER) Then
+    m_ClassName = String(ReqSize, 0)
+    bResult = SetupDiGetINFClass(INF_File, m_ClassGUID, m_ClassName, ReqSize)
+    If bResult = False Then
+      Debug.Print "SetupDiGetINFClass Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+      Exit Function
+    Else
+      m_ClassName = Left(m_ClassName, InStr(m_ClassName, Chr(0)) - 1)
+      Debug.Print "m_ClassName=" & m_ClassName
+    End If
+  Else
+    Debug.Print "SetupDiGetINFClass Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    Exit Function
+  End If
+  
+  ' Create the container for the to-be-created Device Information Element
+  hDeviceInfoSet = SetupDiCreateDeviceInfoList(m_ClassGUID)
+  If hDeviceInfoSet = INVALID_HANDLE_VALUE Then
+    Debug.Print "SetupDiCreateDeviceInfoList Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    Exit Function
+  End If
+  Debug.Print "hDeviceInfoSet=" & hDeviceInfoSet
+  
+  ' Now create the element. Use the Class GUID and Name from the INF file.
+  m_DeviceInfoData.cbSize = LenB(m_DeviceInfoData)
+  bResult = SetupDiCreateDeviceInfo(hDeviceInfoSet, m_ClassName, m_ClassGUID, _
+   vbNullString, 0&, DICD_GENERATE_ID, m_DeviceInfoData)
+  If bResult = False Then
+    Debug.Print "SetupDiCreateDeviceInfo Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo Cleanup
+  End If
+  
+  ' Add the HardwareID to the Device's HardwareID property.
+  bResult = SetupDiSetDeviceRegistryProperty(hDeviceInfoSet, m_DeviceInfoData, SPDRP_HARDWAREID, _
+   StrPtr(StrConv(Hardware_ID, vbFromUnicode)), Len(Hardware_ID) + 2)
+  If bResult = False Then
+    Debug.Print "SetupDiSetDeviceRegistryProperty Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo Cleanup
+  End If
+  
+  bResult = SetupDiRegisterDeviceInfo(hDeviceInfoSet, m_DeviceInfoData, 0&, 0&, 0&, 0&)
+  If bResult = False Then
+    Debug.Print "SetupDiRegisterDeviceInfo 1 Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    bRemove = True
+    GoTo Cleanup
+  End If
+  
+  hKeyDev = SetupDiOpenDevRegKey(hDeviceInfoSet, m_DeviceInfoData, _
+   DICS_FLAG_GLOBAL, 0&, DIREG_DRV, KEY_ALL_ACCESS)
+  If (hKeyDev = INVALID_HANDLE_VALUE) Then 'This call fails....
+    hKeyDev = SetupDiCreateDevRegKey(hDeviceInfoSet, m_DeviceInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, 0, vbNullString)
+    If hKeyDev = INVALID_HANDLE_VALUE Then
+      Debug.Print "SetupDiCreateDeviceInfoList Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+      bRemove = True
+      GoTo Cleanup
+    End If
+  End If
+  Debug.Print "hKeyDev=" & hKeyDev
+  
+  dwRet = RegSetValueEx(hKeyDev, "AttachedTo", 0&, REG_SZ, COM_Port, CLng(Len(COM_Port) + 1))
+  RegCloseKey hKeyDev
+  If dwRet <> ERROR_SUCCESS Then
+    Debug.Print "RegSetValueEx Error " & RaiseAPIErrorByNumber(dwRet)
+    bRemove = True
+    GoTo Cleanup
+  End If
+  
+  bResult = SetupDiRegisterDeviceInfo(hDeviceInfoSet, m_DeviceInfoData, 0&, 0&, 0&, 0&)
+  If bResult = False Then
+    Debug.Print "SetupDiRegisterDeviceInfo 2 Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    bRemove = True
+    GoTo Cleanup
+  End If
+  
+  ' Install the Driver
+  ' http://support.microsoft.com/kb/889763/ru
+  ' первая попытка (InstallSelectedDriver) - устанавливаем драйвер только для данного девайса
+  ' в m_DeviceInstallParams указываем устанавливать драйвер строго из заданного INF
+  
+  ' InstallSelectedDriver works on the selected device and on the
+  ' selected driver on that device. Therefore, set this device as the
+  ' selected one in the device information list.
+  bResult = SetupDiSetSelectedDevice(hDeviceInfoSet, m_DeviceInfoData)
+  If bResult = False Then
+    Debug.Print "SetupDiSetSelectedDevice Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo ForceInstall
+  End If
+  
+  '==================================================
+  ' You now have a SP_DEVINFO_DATA structure
+  ' representing your device.  Next, get a SP_DRVINFO_DATA
+  ' structure to install on that device.
+  m_DeviceInstallParams.cbSize = LenB(m_DeviceInstallParams)
+  bResult = SetupDiGetDeviceInstallParams(hDeviceInfoSet, _
+                                       m_DeviceInfoData, _
+                                       m_DeviceInstallParams)
+  If bResult = False Then
+    Debug.Print "SetupDiGetDeviceInstallParams Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo ForceInstall
+  End If
+
+  ' Only build the driver list out of the passed-in INF.
+  ' To do this, set the DI_ENUMSINGLEINF flag, and copy the
+  ' full path of the INF into the DriverPath field of the
+  ' DeviceInstallParams structure.
+  m_DeviceInstallParams.Flags = m_DeviceInstallParams.Flags Or DI_ENUMSINGLEINF
+  Dim i As Long
+  For i = 0 To Len(INF_File) - 1
+    m_DeviceInstallParams.DriverPath(i) = Asc(Mid(INF_File, i + 1, 1))
+  Next i
+  
+  ' Set the DI_FLAGSEX_ALLOWEXCLUDEDDRVS flag so that you can use
+  ' this INF even if it is marked as ExcludeFromSelect.
+  ' ExcludeFromSelect means do not show the INF in the legacy Add
+  ' Hardware Wizard.
+  m_DeviceInstallParams.FlagsEx = m_DeviceInstallParams.FlagsEx Or DI_FLAGSEX_ALLOWEXCLUDEDDRVS
+  bResult = SetupDiSetDeviceInstallParams(hDeviceInfoSet, _
+                                       m_DeviceInfoData, _
+                                       m_DeviceInstallParams)
+  If bResult = False Then
+    Debug.Print "SetupDiSetDeviceInstallParams Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo ForceInstall
+  End If
+  '==================================================
+  
+  ' Build up a Driver Information List.
+  ' Build a compatible driver list, meaning only include the
+  ' driver nodes that match one of the hardware or compatible Ids of
+  ' the device.
+  bResult = SetupDiBuildDriverInfoList(hDeviceInfoSet, m_DeviceInfoData, SPDIT_COMPATDRIVER)
+  If bResult = False Then
+    Debug.Print "SetupDiBuildDriverInfoList Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo ForceInstall
+  End If
+  
+  ' Pick the best driver in the list of drivers that was built.
+  bResult = SetupDiCallClassInstaller(DIF_SELECTBESTCOMPATDRV, hDeviceInfoSet, m_DeviceInfoData)
+  If bResult = False Then
+    Debug.Print "SetupDiCallClassInstaller Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo ForceInstall
+  End If
+  
+  ' Get the selected driver node.
+  ' Note: If this list does not contain any drivers, this call
+  ' will fail with ERROR_NO_DRIVER_SELECTED.
+  m_DriverInfoData.cbSize = LenB(m_DriverInfoData)
+  bResult = SetupDiGetSelectedDriver(hDeviceInfoSet, m_DeviceInfoData, m_DriverInfoData)
+  If bResult = False Then
+    Debug.Print "SetupDiGetSelectedDriver Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo ForceInstall
+  End If
+  
+  Dim dwRebootRequired As Long
+  bResult = InstallSelectedDriver(0, hDeviceInfoSet, 0&, 0&, dwRebootRequired)
+  If bResult = False Then
+    Debug.Print "InstallSelectedDriver Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    GoTo ForceInstall
+  Else
+    If (dwRebootRequired = DI_NEEDREBOOT) Or (dwRebootRequired = DI_NEEDRESTART) Then _
+     RebootRequired = True
+    InstallModem = True
+    Debug.Print "InstallSelectedDriver OK."
+    GoTo Cleanup
+  End If
+    
+ForceInstall:
+  'по сути этот код не нужен
+  'используем UpdateDriverForPlugAndPlayDevices (также с явным указанием INF-файла)
+  'избегаем использовать этот метод, т.к. он обновляет драйвера для всех
+  'ранее установленных девайсов с таким же Hardware_ID, в чем нет необходимости
+  'чисто для подстраховки, раз уж сделано
+  bResult = UpdateDriverForPlugAndPlayDevices(0&, Hardware_ID, INF_File, _
+   INSTALLFLAG_FORCE, RebootRequired)
+  If bResult = False Then
+    Debug.Print "UpdateDriverForPlugAndPlayDevices Error " & RaiseAPIErrorByNumber(Err.LastDllError)
+    bRemove = True
+    GoTo Cleanup
+  Else
+    InstallModem = True
+    Debug.Print "UpdateDriverForPlugAndPlayDevices OK."
+    GoTo Cleanup
+  End If
+    
+Cleanup:
+  If bRemove Then
+    ' Delete Device Instance that was registered using SetupDiRegisterDeviceInfo
+    ' May through an error if Device not registered -- who cares??
+    SetupDiCallClassInstaller DIF_REMOVE, hDeviceInfoSet, m_DeviceInfoData
+  End If
+  
+  SetupDiDestroyDeviceInfoList hDeviceInfoSet
+  
+End Function

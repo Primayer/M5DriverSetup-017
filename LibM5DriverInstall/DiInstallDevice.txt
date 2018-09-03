@@ -1,0 +1,105 @@
+﻿
+https://stackoverflow.com/questions/17588957/programmatically-create-destroy-network-bridges-with-net-on-windows-7/17604131
+
+Programmatically create/destroy network bridges with .NET on Windows 7
+
+ I don't use UpdateDriverForPlugAndPlayDevices like devcon but I'm using DiInstallDevice instead.
+
+However, installing the drivers for the first time in non interactive mode (without user interaction) is not possible. This is because there are no corresponding .cat files for the builtin bridge .inf files. Neither UpdateDriverForPlugAndPlayDevices nor DiInstallDevice nor DiInstallDriver is intended for manual driver installation where .inf file is already contained in %SystemRoot%\inf but not yet in %SystemRoot%\System32\DriverStore.
+
+The files should be on the distribution media or in a vendor-created directory, not in a system location such as %SystemRoot%\inf
+
+All of the mentioned installation methods will create a OEM copy of the .inf file and will install it in driver store. Because this OEM copy is initially not part of the driver store, windows will show a prompt dialog and ask for user interaction either force installing the driver or canceling. Subsequent driver installations is possible without any user interaction by the way. Also preinstalled drivers (see pnputil -a) can be installed in non interactive mode.
+
+So this is my solution:
+
+First a device entry in HKLM\System\CurrentControlSet\Enum\Root is created with the given hardware id as device name (ms_bridge, ms_bridgemp) with the help of SetupDiCreateDeviceInfo
+The hardware id is assigned with SetupDiSetDeviceRegistryProperty
+The driver list is builded by exactly the given single .inf file with the help of SetupDiSetDeviceInstallParams
+Enumerating and preselecting driver with SetupDiSetSelectedDriver
+Registering device with SetupDiCallClassInstaller(DIF_REGISTERDEVICE...)
+Installing with DiInstallDevice
+This is the full code:
+HRESULT InstallDriver(const wchar_t* DriverInfFile, const wchar_t* HardwareId) {
+    HRESULT Hr = S_OK;
+
+    GUID ClassGUID;
+    wchar_t ClassName[MAX_CLASS_NAME_LEN] = {0};
+
+    if (SetupDiGetINFClass(DriverInfFile, &ClassGUID, ClassName, sizeof(ClassName) / sizeof(wchar_t), nullptr) == FALSE) {
+        Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+        return Hr;
+    }
+
+    HDEVINFO DeviceInfoSet = SetupDiCreateDeviceInfoList(&ClassGUID, nullptr);
+
+    if (DeviceInfoSet == INVALID_HANDLE_VALUE) {
+        Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+        return Hr;
+    }
+
+    SP_DEVINFO_DATA DeviceInfoData = {
+        sizeof(SP_DEVINFO_DATA), 0
+    };
+
+    if (SetupDiCreateDeviceInfo(DeviceInfoSet, HardwareId, &ClassGUID, nullptr, nullptr, DICD_GENERATE_ID, &DeviceInfoData) == FALSE) {
+        Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+        SetupDiDestroyDeviceInfoList(DeviceInfoSet);
+        return Hr;
+    }
+
+    if (SetupDiSetDeviceRegistryProperty(DeviceInfoSet, &DeviceInfoData, SPDRP_HARDWAREID, (LPBYTE) HardwareId, (DWORD) (wcslen(HardwareId) + 1) * sizeof(wchar_t)) == FALSE) {
+        Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+        SetupDiDestroyDeviceInfoList(DeviceInfoSet);
+        return Hr;
+    }
+
+    SP_DEVINSTALL_PARAMS InstallParams = {sizeof(SP_DEVINSTALL_PARAMS), 0};
+
+    InstallParams.FlagsEx = DI_FLAGSEX_ALLOWEXCLUDEDDRVS | DI_FLAGSEX_ALWAYSWRITEIDS;
+    InstallParams.Flags = DI_QUIETINSTALL | DI_ENUMSINGLEINF;
+    wcscpy_s(InstallParams.DriverPath, DriverInfFile);
+
+    if (SetupDiSetDeviceInstallParams(DeviceInfoSet, &DeviceInfoData, &InstallParams) == FALSE) {
+        Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+        SetupDiDestroyDeviceInfoList(DeviceInfoSet);
+        return Hr;
+    }
+
+    SP_DRVINFO_DATA DriverInfoData = {sizeof(SP_DRVINFO_DATA), 0};
+
+    if (SetupDiBuildDriverInfoList(DeviceInfoSet, &DeviceInfoData, SPDIT_COMPATDRIVER) == FALSE) {
+        Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+        SetupDiDestroyDriverInfoList(DeviceInfoSet, &DeviceInfoData, SPDIT_COMPATDRIVER);
+    }
+
+    // Use first best driver (since specified by inf file)
+
+    if (SetupDiEnumDriverInfo(DeviceInfoSet, &DeviceInfoData, SPDIT_COMPATDRIVER, 0, &DriverInfoData)) {
+        SetupDiSetSelectedDriver(DeviceInfoSet, &DeviceInfoData, &DriverInfoData);
+    }
+
+    if (SetupDiCallClassInstaller(DIF_REGISTERDEVICE, DeviceInfoSet, &DeviceInfoData) == FALSE) {
+        Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+    }
+
+    // TODO: Allow non interactive mode for drivers already contained in %SystemRoot%\inf directory
+
+    //BOOL PreviousMode = SetupSetNonInteractiveMode(TRUE);
+
+    if (Hr == S_OK) {
+        if (DiInstallDevice(nullptr, DeviceInfoSet, &DeviceInfoData, &DriverInfoData, 0, nullptr) == FALSE) {
+            Hr = HRESULT_FROM_SETUPAPI(GetLastError());
+            // Ensure that the device entry in \ROOT\ENUM\ will be removed...
+            SetupDiRemoveDevice(DeviceInfoSet, &DeviceInfoData);
+        }
+    }
+
+    //SetupSetNonInteractiveMode(PreviousMode);
+
+    SetupDiDestroyDeviceInfoList(DeviceInfoSet);
+
+    return Hr;
+}
+
+

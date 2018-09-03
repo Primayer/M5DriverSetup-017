@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27703.2042
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "LibM5Ftdi", "LibM5Ftdi\LibM5Ftdi.vbproj", "{8F5FEE24-8D24-4D1D-A9CF-EE41DB0644A6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8F5FEE24-8D24-4D1D-A9CF-EE41DB0644A6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F5FEE24-8D24-4D1D-A9CF-EE41DB0644A6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F5FEE24-8D24-4D1D-A9CF-EE41DB0644A6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F5FEE24-8D24-4D1D-A9CF-EE41DB0644A6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6B77E5A8-5284-42A4-B23E-442CB6AE53B9}
+	EndGlobalSection
+EndGlobal
